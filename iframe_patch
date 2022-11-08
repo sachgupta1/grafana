@@ -1,0 +1,178 @@
+diff --git a/public/app/core/components/AppChrome/AppChromeService.tsx b/public/app/core/components/AppChrome/AppChromeService.tsx
+index 54efe9e132..2571676c18 100644
+--- a/public/app/core/components/AppChrome/AppChromeService.tsx
++++ b/public/app/core/components/AppChrome/AppChromeService.tsx
+@@ -93,8 +93,8 @@ export class AppChromeService {
+   };
+ 
+   exitKioskMode() {
+-    this.update({ kioskMode: undefined });
+-    locationService.partial({ kiosk: null });
++    //this.update({ kioskMode: undefined });
++    //locationService.partial({ kiosk: null });
+   }
+ 
+   setKioskModeFromUrl(kiosk: UrlQueryValue) {
+diff --git a/public/app/core/services/backend_srv.ts b/public/app/core/services/backend_srv.ts
+index 6a4e009372..c3f99cd330 100644
+--- a/public/app/core/services/backend_srv.ts
++++ b/public/app/core/services/backend_srv.ts
+@@ -23,7 +23,7 @@ import { DashboardSearchItem } from 'app/features/search/types';
+ import { getGrafanaStorage } from 'app/features/storage/storage';
+ import { TokenRevokedModal } from 'app/features/users/TokenRevokedModal';
+ import { DashboardDTO, FolderDTO } from 'app/types';
+-
++import { locationService } from '@grafana/runtime';
+ import { ShowModalReactEvent } from '../../types/events';
+ import {
+   isContentTypeApplicationJson,
+@@ -305,6 +305,7 @@ export class BackendSrv implements BackendService {
+   }
+ 
+   showErrorAlert<T>(config: BackendSrvRequest, err: FetchError) {
++
+     if (config.showErrorAlert === false) {
+       return;
+     }
+@@ -361,7 +362,7 @@ export class BackendSrv implements BackendService {
+         if (!err.isHandled) {
+           this.showErrorAlert(options, err);
+         }
+-      }, 50);
++      }, 20);
+     }
+ 
+     this.inspectorStream.next(err);
+diff --git a/public/app/core/services/keybindingSrv.ts b/public/app/core/services/keybindingSrv.ts
+index 9706221a0e..61518a9feb 100644
+--- a/public/app/core/services/keybindingSrv.ts
++++ b/public/app/core/services/keybindingSrv.ts
+@@ -23,16 +23,19 @@ import {
+ import { AppChromeService } from '../components/AppChrome/AppChromeService';
+ import { HelpModal } from '../components/help/HelpModal';
+ import { contextSrv } from '../core';
+-
++import { config as adminconfig } from 'app/core/config';
+ import { toggleTheme } from './toggleTheme';
+ import { withFocusedPanel } from './withFocusedPanelId';
+ 
++
+ export class KeybindingSrv {
+   constructor(private locationService: LocationService, private chromeService: AppChromeService) {}
+ 
+   clearAndInitGlobalBindings() {
+     Mousetrap.reset();
+ 
++    const isAdmin = adminconfig.bootData.user.isGrafanaAdmin;
++    if (isAdmin) {
+     if (this.locationService.getLocation().pathname !== '/login') {
+       this.bind(['?', 'h'], this.showHelpModal);
+       this.bind('g h', this.goToHome);
+@@ -52,6 +55,7 @@ export class KeybindingSrv {
+       this.bind('t n', () => this.toggleNav());
+     }
+   }
++  }
+ 
+   bindGlobalEsc() {
+     this.bindGlobal('esc', this.globalEsc);
+@@ -193,6 +197,8 @@ export class KeybindingSrv {
+   }
+ 
+   setupTimeRangeBindings(updateUrl = true) {
++   const isAdmin = adminconfig.bootData.user.isGrafanaAdmin;
++   if(isAdmin){
+     this.bind('t z', () => {
+       appEvents.publish(new ZoomOutEvent({ scale: 2, updateUrl }));
+     });
+@@ -208,9 +214,12 @@ export class KeybindingSrv {
+     this.bind('t right', () => {
+       appEvents.publish(new ShiftTimeEvent({ direction: ShiftTimeEventDirection.Right, updateUrl }));
+     });
++   }
+   }
+ 
+   setupDashboardBindings(dashboard: DashboardModel) {
++   const isAdmin = adminconfig.bootData.user.isGrafanaAdmin;
++   if(isAdmin){
+     this.bind('mod+o', () => {
+       dashboard.graphTooltip = (dashboard.graphTooltip + 1) % 3;
+       dashboard.events.publish(new LegacyGraphHoverClearEvent());
+@@ -350,4 +359,5 @@ export class KeybindingSrv {
+       window.location.href = window.location.href + newUrlParam;
+     });
+   }
++ }
+ }
+diff --git a/public/app/features/dashboard/dashgrid/PanelHeader/PanelHeader.tsx b/public/app/features/dashboard/dashgrid/PanelHeader/PanelHeader.tsx
+index c5bf73cf32..1ad9fa6dfc 100644
+--- a/public/app/features/dashboard/dashgrid/PanelHeader/PanelHeader.tsx
++++ b/public/app/features/dashboard/dashgrid/PanelHeader/PanelHeader.tsx
+@@ -14,6 +14,8 @@ import { PanelHeaderMenuTrigger } from './PanelHeaderMenuTrigger';
+ import { PanelHeaderMenuWrapper } from './PanelHeaderMenuWrapper';
+ import { PanelHeaderNotices } from './PanelHeaderNotices';
+ 
++import config from 'app/core/config';
++
+ export interface Props {
+   panel: PanelModel;
+   dashboard: DashboardModel;
+@@ -32,6 +34,7 @@ export const PanelHeader: FC<Props> = ({ panel, error, isViewing, isEditing, dat
+   const title = panel.getDisplayTitle();
+   const className = cx('panel-header', !(isViewing || isEditing) ? 'grid-drag-handle' : '');
+   const styles = useStyles2(panelStyles);
++  const isAdmin = config.bootData.user.isGrafanaAdmin;
+ 
+   return (
+     <>
+@@ -60,7 +63,7 @@ export const PanelHeader: FC<Props> = ({ panel, error, isViewing, isEditing, dat
+                     />
+                   ) : null}
+                   <h2 className={styles.titleText}>{title}</h2>
+-                  {!dashboard.meta.publicDashboardAccessToken && (
++                  {!dashboard.meta.publicDashboardAccessToken && isAdmin && (
+                     <div data-testid="panel-dropdown">
+                       <Icon name="angle-down" className="panel-menu-toggle" />
+                       {panelMenuOpen ? (
+diff --git a/public/app/features/live/dashboard/dashboardWatcher.ts b/public/app/features/live/dashboard/dashboardWatcher.ts
+index e7cccd2b72..2199a4c3c7 100644
+--- a/public/app/features/live/dashboard/dashboardWatcher.ts
++++ b/public/app/features/live/dashboard/dashboardWatcher.ts
+@@ -19,6 +19,8 @@ import { getDashboardSrv } from '../../dashboard/services/DashboardSrv';
+ import { DashboardChangedModal } from './DashboardChangedModal';
+ import { DashboardEvent, DashboardEventAction } from './types';
+ 
++import config from 'app/core/config';
++
+ class DashboardWatcher {
+   channel?: LiveChannelAddress; // path to the channel
+   uid?: string;
+@@ -121,9 +123,10 @@ class DashboardWatcher {
+             }
+ 
+             const showPopup = this.editing || dash.hasUnsavedChanges();
+-
++	   
++            const isAdmin = config.bootData.user.isGrafanaAdmin;
+             if (action === DashboardEventAction.Saved) {
+-              if (showPopup) {
++              if (showPopup && isAdmin) {
+                 appEvents.publish(
+                   new ShowModalReactEvent({
+                     component: DashboardChangedModal,
+@@ -131,10 +134,12 @@ class DashboardWatcher {
+                   })
+                 );
+               } else {
+-                appEvents.emit(AppEvents.alertSuccess, ['Dashboard updated']);
++                if(isAdmin){
++                    appEvents.emit(AppEvents.alertSuccess, ['Dashboard updated']);
++                }
+                 this.reloadPage();
+               }
+-            } else if (showPopup) {
++            } else if (showPopup && isAdmin) {
+               if (action === DashboardEventAction.EditingStarted && !this.hasSeenNotice) {
+                 const editingEvent = event.message;
+                 const recent = this.getRecentEditingEvent();
+
